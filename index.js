@@ -1,51 +1,74 @@
-const express = require("express");
-const app = express();
-const http = require("http");
-const { getPackedSettings } = require("http2");
-const server = http.createServer(app);
-const port = 3001;
-const { Server } = require("socket.io");
-
-console.log("CORNERSTONE SOCKET")
-
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
+var socket = io.connect("http://10.0.0.217:3001", {
+  secure: true,
+  rejectUnauthorized: false,
+  withCredentials: true,
+  transport: ["websocket"],
 });
 
-io.on("connection", (socket) => {
-  console.log("USER HAS CONNECTED");
+function debounce(func, timeout = 5) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      func.apply(this, args);
+    }, timeout);
+  };
+}
+function saveInput() {
+  console.log("Saving data");
+}
+const processChange = debounce(() => saveInput());
 
-  let packets = [];
+//Listener
+socket.on("connect", () => {
+  console.log("connecting attempt");
+  try {
+    console.log("Successfuly conntected to socket @ http://10.0.0.217:3001");
 
-  socket.on("create_session", (sessionPayload) => {
-    console.log("CREATE SESSION");
-    const session = {
-      ...sessionPayload,
-      location: {
-        ...sessionPayload.location,
-        ip: socket.handshake.address,
-      },
+    let previousUrl = "";
+
+    const onMouseMove = debounce((e) => {
+      socket.emit("packet", [
+        {
+          type: "mousemove",
+          date: Date.now(),
+          pos: [e.clientX, e.clientY],
+        },
+      ]);
+    });
+
+    const urlObserver = () => {
+      if (window.location.href !== previousUrl) {
+        socket.emit("packet", [
+          {
+            type: "navigate",
+            date: Date.now(),
+            data: {
+              url: window.location.href,
+            },
+          },
+        ]);
+        previousUrl = window.location.href;
+      }
     };
-    packets.push(session);
-  });
 
-  socket.on("packet", (packet) => {
-    packets = [...packets, ...packet];
-  });
+    const observer = new MutationObserver(urlObserver);
+    const config = { subtree: true, childList: true };
+    // start observing change
+    observer.observe(document, config);
+    window.addEventListener("mousemove", onMouseMove);
 
-  setInterval(() => {
-    if (packets.length == 0) return;
-
-    console.log({ packets });
-
-    packets = [];
-  }, 250);
-});
-
-server.listen(port, () => {
-  console.log("listening on *:3001");
+    socket.emit("create_session", {
+      company_id: 1,
+      screen: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
+      location: {
+        href: window.location.href,
+      },
+    });
+  } catch (e) {
+    console.log(e);
+  }
 });
