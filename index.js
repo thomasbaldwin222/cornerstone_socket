@@ -1,4 +1,4 @@
-var socket = window.io.connect("http://10.0.0.217:3001", {
+var socket = io.connect("http://10.0.0.217:3001", {
   secure: true,
   rejectUnauthorized: false,
   withCredentials: true,
